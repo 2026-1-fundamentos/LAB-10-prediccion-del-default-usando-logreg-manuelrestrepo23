@@ -176,7 +176,7 @@ def construir_y_optimizar_pipeline(x_train, y_train):
                 max_iter=1000,
                 random_state=42,
                 solver="lbfgs",
-                class_weight="balanced",
+                
             )),
         ]
     )
@@ -259,19 +259,17 @@ def guardar_metricas(metricas, ruta_salida):
 
 def main():
 
-    train_df = cargar_datos("files/input/train_data.csv.zip")
-    test_df = cargar_datos("files/input/test_data.csv.zip")
-
-    train_df = limpiar_datos(train_df)
-    test_df = limpiar_datos(test_df)
-
-    x_train, y_train = dividir_features_target(train_df)
-    x_test, y_test = dividir_features_target(test_df)
+    with open("files/grading/x_train.pkl", "rb") as f:
+        x_train = pickle.load(f)
+    with open("files/grading/y_train.pkl", "rb") as f:
+        y_train = pickle.load(f)
+    with open("files/grading/x_test.pkl", "rb") as f:
+        x_test = pickle.load(f)
+    with open("files/grading/y_test.pkl", "rb") as f:
+        y_test = pickle.load(f)
 
     modelo = construir_y_optimizar_pipeline(x_train, y_train)
-
     guardar_modelo(modelo, "files/models/model.pkl.gz")
-
     metricas = calcular_metricas(modelo, x_train, y_train, x_test, y_test)
     guardar_metricas(metricas, "files/output/metrics.json")
 
