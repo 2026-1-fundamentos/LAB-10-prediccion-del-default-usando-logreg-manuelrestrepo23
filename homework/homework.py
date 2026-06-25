@@ -95,3 +95,179 @@
 # {'type': 'cm_matrix', 'dataset': 'train', 'true_0': {"predicted_0": 15562, "predicte_1": 666}, 'true_1': {"predicted_0": 3333, "predicted_1": 1444}}
 # {'type': 'cm_matrix', 'dataset': 'test', 'true_0': {"predicted_0": 15562, "predicte_1": 650}, 'true_1': {"predicted_0": 2490, "predicted_1": 1420}}
 #
+import gzip
+import json
+import os
+import pickle
+import zipfile
+
+import pandas as pd 
+from sklearn.compose import ColumnTransformer 
+from sklearn.feature_selection import SelectKBest, f_classif  
+from sklearn.linear_model import LogisticRegression  
+from sklearn.metrics import (  
+    balanced_accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
+from sklearn.model_selection import GridSearchCV 
+from sklearn.pipeline import Pipeline  
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder  
+
+
+def cargar_datos(ruta_zip):
+
+    with zipfile.ZipFile(ruta_zip) as archivo_zip:
+        nombre_csv = archivo_zip.namelist()[0]
+        with archivo_zip.open(nombre_csv) as archivo_csv:
+            df = pd.read_csv(archivo_csv)
+    return df
+
+
+def limpiar_datos(df):
+
+    df = df.copy()
+
+    df = df.rename(columns={"default payment next month": "default"})
+
+    df = df.drop(columns=["ID"])
+
+    df = df[df["EDUCATION"] != 0]
+    df = df[df["MARRIAGE"] != 0]
+
+    df["EDUCATION"] = df["EDUCATION"].apply(lambda x: x if x <= 4 else 4)
+
+    return df
+
+
+def dividir_features_target(df):
+
+    x = df.drop(columns=["default"])
+    y = df["default"]
+    return x, y
+
+
+def construir_y_optimizar_pipeline(x_train, y_train):
+
+    columnas_categoricas = ["SEX", "EDUCATION", "MARRIAGE"]
+    columnas_numericas = [c for c in x_train.columns if c not in columnas_categoricas]
+
+    preprocesador = ColumnTransformer(
+        transformers=[
+            (
+                "onehot",
+                OneHotEncoder(handle_unknown="ignore"),
+                columnas_categoricas,
+            ),
+            (
+                "scaler",
+                MinMaxScaler(),
+                columnas_numericas,
+            ),
+        ]
+    )
+
+    pipeline = Pipeline(
+        steps=[
+            ("preprocesador", preprocesador),
+            ("selector", SelectKBest(score_func=f_classif)),
+            ("clasificador", LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced")),
+        ]
+    )
+
+    parametros = {
+        "selector__k": [10, 15, 20],
+        "clasificador__C": [0.1, 1.0, 10.0],
+        "clasificador__solver": ["lbfgs", "liblinear"],
+    }
+
+    modelo = GridSearchCV(
+        pipeline,
+        parametros,
+        cv=10,
+        scoring="balanced_accuracy",
+        n_jobs=-1,
+        refit=True,
+    )
+
+    modelo.fit(x_train, y_train)
+
+    return modelo
+
+def guardar_modelo(modelo, ruta_salida):
+
+    os.makedirs(os.path.dirname(ruta_salida), exist_ok=True)
+
+    with gzip.open(ruta_salida, "wb") as archivo:
+        pickle.dump(modelo, archivo)
+
+def calcular_metricas(modelo, x_train, y_train, x_test, y_test):
+    metricas = []
+    matrices = []
+
+    for nombre_dataset, x, y in [
+        ("train", x_train, y_train),
+        ("test", x_test, y_test),
+    ]:
+        predicciones = modelo.predict(x)
+
+        metricas.append(
+            {
+                "type": "metrics",
+                "dataset": nombre_dataset,
+                "precision": round(precision_score(y, predicciones, zero_division=0), 4),
+                "balanced_accuracy": round(balanced_accuracy_score(y, predicciones), 4),
+                "recall": round(recall_score(y, predicciones, zero_division=0), 4),
+                "f1_score": round(f1_score(y, predicciones, zero_division=0), 4),
+            }
+        )
+
+        cm = confusion_matrix(y, predicciones)
+        matrices.append(
+            {
+                "type": "cm_matrix",
+                "dataset": nombre_dataset,
+                "true_0": {
+                    "predicted_0": int(cm[0][0]),
+                    "predicted_1": int(cm[0][1]),
+                },
+                "true_1": {
+                    "predicted_0": int(cm[1][0]),
+                    "predicted_1": int(cm[1][1]),
+                },
+            }
+        )
+
+    return metricas + matrices
+
+
+def guardar_metricas(metricas, ruta_salida):
+
+    os.makedirs(os.path.dirname(ruta_salida), exist_ok=True)
+
+    with open(ruta_salida, "w", encoding="utf-8") as archivo:
+        for metrica in metricas:
+            archivo.write(json.dumps(metrica) + "\n")
+
+def main():
+    train_df = cargar_datos("files/input/train_data.csv.zip")
+    test_df = cargar_datos("files/input/test_data.csv.zip")
+
+    train_df = limpiar_datos(train_df)
+    test_df = limpiar_datos(test_df)
+
+    x_train, y_train = dividir_features_target(train_df)
+    x_test, y_test = dividir_features_target(test_df)
+
+    modelo = construir_y_optimizar_pipeline(x_train, y_train)
+
+    guardar_modelo(modelo, "files/models/model.pkl.gz")
+
+    metricas = calcular_metricas(modelo, x_train, y_train, x_test, y_test)
+    guardar_metricas(metricas, "files/output/metrics.json")
+
+
+if __name__ == "__main__":
+    main()
