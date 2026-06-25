@@ -94,26 +94,27 @@
 #
 # {'type': 'cm_matrix', 'dataset': 'train', 'true_0': {"predicted_0": 15562, "predicte_1": 666}, 'true_1': {"predicted_0": 3333, "predicted_1": 1444}}
 # {'type': 'cm_matrix', 'dataset': 'test', 'true_0': {"predicted_0": 15562, "predicte_1": 650}, 'true_1': {"predicted_0": 2490, "predicted_1": 1420}}
-#
+
 import gzip
 import json
 import os
 import pickle
 import zipfile
 
-import pandas as pd  # type: ignore
-from sklearn.feature_selection import SelectKBest, f_classif  # type: ignore
-from sklearn.linear_model import LogisticRegression  # type: ignore
-from sklearn.metrics import (  # type: ignore
+import pandas as pd  
+from sklearn.compose import ColumnTransformer  
+from sklearn.feature_selection import SelectKBest, f_classif  
+from sklearn.linear_model import LogisticRegression  
+from sklearn.metrics import ( 
     balanced_accuracy_score,
     confusion_matrix,
     f1_score,
     precision_score,
     recall_score,
 )
-from sklearn.model_selection import GridSearchCV  # type: ignore
-from sklearn.pipeline import Pipeline  # type: ignore
-from sklearn.preprocessing import MinMaxScaler  # type: ignore
+from sklearn.model_selection import GridSearchCV  
+from sklearn.pipeline import Pipeline  
+from sklearn.preprocessing import MinMaxScaler, OneHotEncoder  
 
 
 def cargar_datos(ruta_zip):
@@ -141,28 +142,35 @@ def limpiar_datos(df):
     return df
 
 def dividir_features_target(df):
+    """Divide el DataFrame en features y target"""
 
     x = df.drop(columns=["default"])
     y = df["default"]
     return x, y
 
-
-def aplicar_onehot(x_train, x_test):
+def construir_y_optimizar_pipeline(x_train, y_train):
 
     columnas_categoricas = ["SEX", "EDUCATION", "MARRIAGE"]
+    columnas_numericas = [c for c in x_train.columns if c not in columnas_categoricas]
 
-    x_train = pd.get_dummies(x_train, columns=columnas_categoricas)
-    x_test = pd.get_dummies(x_test, columns=columnas_categoricas)
-
-    x_train, x_test = x_train.align(x_test, join="left", axis=1, fill_value=0)
-
-    return x_train, x_test
-
-def construir_y_optimizar_pipeline(x_train, y_train):
+    preprocesador = ColumnTransformer(
+        transformers=[
+            (
+                "onehot",
+                OneHotEncoder(handle_unknown="ignore"),
+                columnas_categoricas,
+            ),
+            (
+                "scaler",
+                MinMaxScaler(),
+                columnas_numericas,
+            ),
+        ]
+    )
 
     pipeline = Pipeline(
         steps=[
-            ("scaler", MinMaxScaler()),
+            ("preprocesador", preprocesador),
             ("selector", SelectKBest(score_func=f_classif)),
             ("clasificador", LogisticRegression(
                 max_iter=1000,
@@ -191,12 +199,14 @@ def construir_y_optimizar_pipeline(x_train, y_train):
 
     return modelo
 
+
 def guardar_modelo(modelo, ruta_salida):
 
     os.makedirs(os.path.dirname(ruta_salida), exist_ok=True)
 
     with gzip.open(ruta_salida, "wb") as archivo:
         pickle.dump(modelo, archivo)
+
 
 def calcular_metricas(modelo, x_train, y_train, x_test, y_test):
 
@@ -219,7 +229,6 @@ def calcular_metricas(modelo, x_train, y_train, x_test, y_test):
                 "f1_score": round(f1_score(y, predicciones, zero_division=0), 4),
             }
         )
-
         cm = confusion_matrix(y, predicciones)
         matrices.append(
             {
@@ -240,13 +249,13 @@ def calcular_metricas(modelo, x_train, y_train, x_test, y_test):
 
 
 def guardar_metricas(metricas, ruta_salida):
-    """Guarda las métricas en un archivo JSON, una por línea"""
 
     os.makedirs(os.path.dirname(ruta_salida), exist_ok=True)
 
     with open(ruta_salida, "w", encoding="utf-8") as archivo:
         for metrica in metricas:
             archivo.write(json.dumps(metrica) + "\n")
+
 
 def main():
 
@@ -258,8 +267,6 @@ def main():
 
     x_train, y_train = dividir_features_target(train_df)
     x_test, y_test = dividir_features_target(test_df)
-
-    x_train, x_test = aplicar_onehot(x_train, x_test)
 
     modelo = construir_y_optimizar_pipeline(x_train, y_train)
 
