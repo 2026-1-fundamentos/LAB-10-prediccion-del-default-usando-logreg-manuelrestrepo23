@@ -138,11 +138,12 @@ def clean_data(df):
         df.drop(columns=["ID"], inplace=True)
 
     if "EDUCATION" in df.columns:
-        df = df[df["EDUCATION"] != 0]
-        df["EDUCATION"] = df["EDUCATION"].replace([5, 6], 4)
+        df["EDUCATION"] = df["EDUCATION"].replace(
+            [0, 5, 6],
+            4,)
 
     if "MARRIAGE" in df.columns:
-        df = df[df["MARRIAGE"] != 0]
+        df["MARRIAGE"] = df["MARRIAGE"].replace(0, 3)
 
     return df
 
@@ -153,11 +154,6 @@ def build_pipeline(X):
         "EDUCATION",
         "MARRIAGE",
         "PAY_0",
-        "PAY_2",
-        "PAY_3",
-        "PAY_4",
-        "PAY_5",
-        "PAY_6",
         
     ]
 
@@ -171,7 +167,10 @@ def build_pipeline(X):
         transformers=[
             (
                 "categorical",
-                OneHotEncoder(handle_unknown="ignore"),
+                OneHotEncoder(
+                    handle_unknown="ignore",
+                     drop="first",
+                ),
                 categorical_features,
             ),
             (
@@ -307,21 +306,12 @@ def main():
         20,
         25,
         "all",],
-        "classifier__C": [
-            0.001,
-            0.01,
-            0.1,
-            1,
-            10,
-            100,
-        ],
+        "classifier__C": [0.01, 0.1, 1, 10, 100],
         "classifier__solver": [
-            "lbfgs",
-            "liblinear",
+            
+            "liblinear"
         ],
-        "classifier__class_weight": [
-        None
-        ],
+       
     }
 
     model = GridSearchCV(
@@ -339,6 +329,13 @@ def main():
     )
     print(model.best_params_)
     print(model.best_score_)
+    print(X_train.shape)
+
+    preprocessor = model.best_estimator_.named_steps["preprocessor"]
+
+    X_transformed = preprocessor.transform(X_train)
+
+    print(X_transformed.shape)
 
     y_train_pred = model.predict(
         X_train
