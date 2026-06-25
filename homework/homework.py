@@ -173,15 +173,14 @@ def construir_y_optimizar_pipeline(x_train, y_train):
         steps=[
             ("preprocesador", preprocesador),
             ("selector", SelectKBest(score_func=f_classif)),
-            ("clasificador", LogisticRegression(max_iter=1000, random_state=42, class_weight={0:1, 1:4})),
+            ("clasificador", LogisticRegression(max_iter=1000, random_state=42, solver="saga", penalty = "elasticnet", l1_ratio=0.5)),
         ]
     )
 
     parametros = {
-        "selector__k": [ 20,23],
-        "clasificador__C": [ 0.1, 1.0, 10.0],
-        "clasificador__solver": ["lbfgs", "liblinear"],
-        "clasificador__penalty": ["11", "12"],
+        "selector__k": [ 20],
+        "clasificador__C": [ 0.1, 1.0],
+        "clasificador__l1_ratio": [0.0, 1.0],
     }
 
     modelo = GridSearchCV(
@@ -191,7 +190,6 @@ def construir_y_optimizar_pipeline(x_train, y_train):
         scoring="balanced_accuracy",
         n_jobs=-1,
         refit=True,
-        error_score=0,
     )
 
     modelo.fit(x_train, y_train)
