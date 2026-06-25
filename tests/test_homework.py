@@ -24,7 +24,7 @@ METRICS = [
     {
         "type": "metrics",
         "dataset": "train",
-        "precision": 0.6,
+        "precision": 0.693,
         "balanced_accuracy": 0.639,
         "recall": 0.319,
         "f1_score": 0.437,
