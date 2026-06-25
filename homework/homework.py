@@ -178,9 +178,10 @@ def construir_y_optimizar_pipeline(x_train, y_train):
     )
 
     parametros = {
-        "selector__k": [10, 15, 20, "all"],
+        "selector__k": [ 15, 20, "all"],
         "clasificador__C": [0.001, 0.1, 1.0, 10.0, 100.0],
         "clasificador__solver": ["lbfgs", "liblinear"],
+        "clasificador__penalty": ["11", "12"],
     }
 
     modelo = GridSearchCV(
@@ -190,6 +191,7 @@ def construir_y_optimizar_pipeline(x_train, y_train):
         scoring="balanced_accuracy",
         n_jobs=-1,
         refit=True,
+        error_score=0,
     )
 
     modelo.fit(x_train, y_train)
