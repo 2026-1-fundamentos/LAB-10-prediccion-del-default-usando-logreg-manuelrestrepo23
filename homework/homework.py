@@ -173,13 +173,13 @@ def construir_y_optimizar_pipeline(x_train, y_train):
         steps=[
             ("preprocesador", preprocesador),
             ("selector", SelectKBest(score_func=f_classif)),
-            ("clasificador", LogisticRegression(max_iter=1000, random_state=42)),
+            ("clasificador", LogisticRegression(max_iter=1000, random_state=42, class_weight={0:1, 1:4})),
         ]
     )
 
     parametros = {
-        "selector__k": [ 15, 20, "all"],
-        "clasificador__C": [0.001, 0.1, 1.0, 10.0, 100.0],
+        "selector__k": [ 20,23],
+        "clasificador__C": [ 0.1, 1.0, 10.0],
         "clasificador__solver": ["lbfgs", "liblinear"],
         "clasificador__penalty": ["11", "12"],
     }
