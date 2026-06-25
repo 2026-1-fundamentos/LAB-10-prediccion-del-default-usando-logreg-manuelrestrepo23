@@ -101,20 +101,19 @@ import os
 import pickle
 import zipfile
 
-import pandas as pd 
-from sklearn.compose import ColumnTransformer 
-from sklearn.feature_selection import SelectKBest, f_classif  
-from sklearn.linear_model import LogisticRegression  
-from sklearn.metrics import (  
+import pandas as pd  # type: ignore
+from sklearn.feature_selection import SelectKBest, f_classif  # type: ignore
+from sklearn.linear_model import LogisticRegression  # type: ignore
+from sklearn.metrics import (  # type: ignore
     balanced_accuracy_score,
     confusion_matrix,
     f1_score,
     precision_score,
     recall_score,
 )
-from sklearn.model_selection import GridSearchCV 
-from sklearn.pipeline import Pipeline  
-from sklearn.preprocessing import MinMaxScaler, OneHotEncoder  
+from sklearn.model_selection import GridSearchCV  # type: ignore
+from sklearn.pipeline import Pipeline  # type: ignore
+from sklearn.preprocessing import MinMaxScaler  # type: ignore
 
 
 def cargar_datos(ruta_zip):
@@ -141,7 +140,6 @@ def limpiar_datos(df):
 
     return df
 
-
 def dividir_features_target(df):
 
     x = df.drop(columns=["default"])
@@ -149,38 +147,35 @@ def dividir_features_target(df):
     return x, y
 
 
-def construir_y_optimizar_pipeline(x_train, y_train):
+def aplicar_onehot(x_train, x_test):
 
     columnas_categoricas = ["SEX", "EDUCATION", "MARRIAGE"]
-    columnas_numericas = [c for c in x_train.columns if c not in columnas_categoricas]
 
-    preprocesador = ColumnTransformer(
-        transformers=[
-            (
-                "onehot",
-                OneHotEncoder(handle_unknown="ignore"),
-                columnas_categoricas,
-            ),
-            (
-                "scaler",
-                MinMaxScaler(),
-                columnas_numericas,
-            ),
-        ]
-    )
+    x_train = pd.get_dummies(x_train, columns=columnas_categoricas)
+    x_test = pd.get_dummies(x_test, columns=columnas_categoricas)
+
+    x_train, x_test = x_train.align(x_test, join="left", axis=1, fill_value=0)
+
+    return x_train, x_test
+
+def construir_y_optimizar_pipeline(x_train, y_train):
 
     pipeline = Pipeline(
         steps=[
-            ("preprocesador", preprocesador),
+            ("scaler", MinMaxScaler()),
             ("selector", SelectKBest(score_func=f_classif)),
-            ("clasificador", LogisticRegression(max_iter=1000, random_state=42, solver="saga", penalty = "elasticnet", l1_ratio=0.5)),
+            ("clasificador", LogisticRegression(
+                max_iter=1000,
+                random_state=42,
+                solver="lbfgs",
+                class_weight="balanced",
+            )),
         ]
     )
 
     parametros = {
-        "selector__k": [ 20],
-        "clasificador__C": [ 0.1, 1.0],
-        "clasificador__l1_ratio": [0.0, 1.0],
+        "selector__k": [15, 20, 25],
+        "clasificador__C": [0.001, 0.01, 0.1, 1.0, 10.0],
     }
 
     modelo = GridSearchCV(
@@ -188,7 +183,7 @@ def construir_y_optimizar_pipeline(x_train, y_train):
         parametros,
         cv=10,
         scoring="balanced_accuracy",
-        n_jobs=-1,
+        n_jobs=1,
         refit=True,
     )
 
@@ -204,6 +199,7 @@ def guardar_modelo(modelo, ruta_salida):
         pickle.dump(modelo, archivo)
 
 def calcular_metricas(modelo, x_train, y_train, x_test, y_test):
+
     metricas = []
     matrices = []
 
@@ -244,6 +240,7 @@ def calcular_metricas(modelo, x_train, y_train, x_test, y_test):
 
 
 def guardar_metricas(metricas, ruta_salida):
+    """Guarda las métricas en un archivo JSON, una por línea"""
 
     os.makedirs(os.path.dirname(ruta_salida), exist_ok=True)
 
@@ -252,6 +249,7 @@ def guardar_metricas(metricas, ruta_salida):
             archivo.write(json.dumps(metrica) + "\n")
 
 def main():
+
     train_df = cargar_datos("files/input/train_data.csv.zip")
     test_df = cargar_datos("files/input/test_data.csv.zip")
 
@@ -260,6 +258,8 @@ def main():
 
     x_train, y_train = dividir_features_target(train_df)
     x_test, y_test = dividir_features_target(test_df)
+
+    x_train, x_test = aplicar_onehot(x_train, x_test)
 
     modelo = construir_y_optimizar_pipeline(x_train, y_train)
 
