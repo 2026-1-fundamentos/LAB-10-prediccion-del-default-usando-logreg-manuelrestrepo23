@@ -114,6 +114,7 @@ def clean_dataset(df):
         df = df.drop(columns=['ID'])
     
     df = df.dropna()
+    df = df.loc[(df['EDUCATION'] != 0) & (df['MARRIAGE'] != 0)]
     df['EDUCATION'] = df['EDUCATION'].apply(lambda x: 4 if x > 4 else x)
     
     return df
@@ -130,10 +131,7 @@ def main():
     x_test = test_df.drop(columns=['default'])
     y_test = test_df['default']
     
-    categorical_features = [
-        'SEX', 'EDUCATION', 'MARRIAGE', 
-        'PAY_0', 'PAY_2', 'PAY_3', 'PAY_4', 'PAY_5', 'PAY_6'
-    ]
+    categorical_features = ['SEX', 'EDUCATION', 'MARRIAGE']
     numerical_features = [col for col in x_train.columns if col not in categorical_features]
     
     preprocessor = ColumnTransformer(
@@ -146,12 +144,13 @@ def main():
     pipeline = Pipeline(steps=[
         ('preprocessor', preprocessor),
         ('feature_selection', SelectKBest(score_func=f_classif)),
-        ('classifier', LogisticRegression(max_iter=1000, random_state=42))
+        ('classifier', LogisticRegression(max_iter=2000, random_state=42))
     ])
     
     param_grid = {
-        'feature_selection__k': [10, 15, 20, 30, 'all'],
-        'classifier__C': [0.1, 1.0, 10.0]
+        'feature_selection__k': [10, 15, 20],
+        'classifier__C': [0.1, 1.0, 10.0],
+        'classifier__class_weight': [None, {0: 1.0, 1: 1.2}, {0: 1.0, 1: 1.5}, {0: 1.0, 1: 2.0}]
     }
     
     grid_search = GridSearchCV(
